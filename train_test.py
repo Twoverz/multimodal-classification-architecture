@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegressionCV
 import matplotlib.pyplot as plt
 from torchvision import transforms
-from HSACon_merge import FeedForward, FeedForward_vgg
+from Classifier import MLP
 
 ######################################3###
 class MyDataset(Dataset):
