@@ -27,26 +27,26 @@ from HSACon_merge import FeedForward, FeedForward_vgg
 ######################################3###
 class MyDataset(Dataset):
     def __init__(self, train_path, transform=None):
-        self.vf = os.listdir(train_path + '/train_vf')
-        self.fund = os.listdir(train_path + '/train_fund')
-        assert len(self.vf) == len(self.fund), 'Number does not match'
+        self.data1 = os.listdir(train_path + '/data_file_type1')
+        self.data2 = os.listdir(train_path + '/data_file_type2')
+        assert len(self.data1) == len(self.data2), 'Number does not match'
         self.transform = transform
-        self.images_and_labels = []  # 存储图像和标签路径
-        for i in range(len(self.vf)):  # 图片加载进去了
+        self.images_and_labels = [] 
+        for i in range(len(self.data1)):
             self.images_and_labels.append(
-                (train_path + '/train_vf/' + self.vf[i], train_path + '/train_fund/' + self.fund[i]))
+                (train_path + '/data_file_type1/' + self.data1[i], train_path + '/data_file_type2/' + self.data2[i]))
 
     def __getitem__(self, item):
-        vf_path, fund_path = self.images_and_labels[item]
-        vf = cv2.imread(vf_path)
-        vf = cv2.resize(vf, (224, 224))
-        fund = cv2.imread(fund_path)
-        fund = cv2.resize(fund, (224, 224))
-        img = np.concatenate((vf,fund),axis=2)#224 224 5
-        # img = np.transpose(img, (2, 0, 1))
+        #load data
+        data1_path, data2_path = self.images_and_labels[item]
+        data1 = cv2.imread(data1_path)
+        image1 = cv2.resize(data1, (224, 224))
+        data2 = cv2.imread(data2_path)
+        image2 = cv2.resize(data2, (224, 224))
+        #fusion
+        img = np.concatenate((image1,image2),axis=2)
 
-        #img = Image.fromarray(img)
-
+        #set label
         if 'a' in vf_path.split('/')[-1]:
             label = 0
         elif 'b' in vf_path.split('/')[-1]:
@@ -55,54 +55,45 @@ class MyDataset(Dataset):
             label = 2
         elif 'd' in vf_path.split('/')[-1]:
             label = 3
+        
         if self.transform is not None:
             img = self.transform(img)
-        #print(vf_path.split('/')[-1], label)
-        #img = img / 255
+       
         return img, label
 
     def __len__(self):
-        return len(self.vf)
+        return len(self.data1)
 
 
-# train
-transform2 = transforms.Compose([transforms.Resize(224), transforms.RandomResizedCrop(224), transforms.ToTensor(),
-                                 transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225, 0.229, 0.224, 0.225])])
+# transform
 transform = transforms.Compose([transforms.ToTensor()])
-# test
 
-# ---------------------------数据集--------------------------------------------------
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# ---------------------------dataloader--------------------------------------------------
 
 train_data = MyDataset('qgy_fund/vf_train/vf_fund', transform)
 train_dataloader = DataLoader(train_data, 16, shuffle=True, num_workers=0)
 
+# ---------------------------device--------------------------------------------------
 
-# ------------------定义网络---------------------------------
-# 载入预训练的型
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# --------------------------initialize model-------------------------
 model = models.squeezenet1_1(pretrained=True)
 model.features[0] = nn.Conv2d(in_channels=6, out_channels=64, kernel_size=(3, 3), stride=(2, 2))
-#model.classifier[1] = nn.Conv2d(in_channels=512, out_channels=4, kernel_size=(1, 1), stride=(1, 1))
-model.classifier[1] = FeedForward(dim=676,hidden_dim=1024,p=13)
-
-#model = models.vgg19_bn(pretrained=True)
-#model.features[0] = nn.Conv2d(6, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-#model.classifier = FeedForward_vgg(25088,4096,4)
-#model.classifier[6] = nn.Linear(in_features=4096, out_features=4, bias=True)
-
+model.classifier[1] = nn.Conv2d(in_channels=512, out_channels=4, kernel_size=(1, 1), stride=(1, 1))
+#model.classifier[1] = MLP(dim=676,hidden_dim=1024,p=13)
 
 
 model.to(device)
 
-# ------------------优化方法，损失函数--------------------------------------------------
+# ------------------optimizer，loss function--------------------------------------------------
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 #optimizer = torch.optim.SGD(model.parameters(), lr=0.001, weight_decay=0.001)
 loss_fc = nn.CrossEntropyLoss()
 scheduler = optim.lr_scheduler.StepLR(optimizer, 10, 0.1)
 '''
-# ------------------训练--------------------------------------------------------------
-num_epoch = 70
+# ------------------train--------------------------------------------------------------
+num_epoch = number
 loss = []
 iteration = []
 acc = []
@@ -146,8 +137,8 @@ for epoch in range(1, num_epoch + 1):
         print('[{},{}] train_loss = {:.5f} train_acc = {:.5f} '.format(
             epoch + 1, i + 1, loss_train.item(), train_correct / train_total))
 
-    # scheduler.step()
-    if epoch % 5 == 0:  # $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+    # ------------------save weight files--------------------------------------------------------------
+    if epoch % 5 == 0: 
         torch.save(model, 'train_pth/class_qgym5_sq_epoch_{}.pth'.format(epoch))
         print('train_pth/class_qgym5_sq_epoch_{}.pth saved!'.format(epoch))
 
@@ -183,32 +174,27 @@ plt.show()
 
 print('Train finish!')
 
-'''
-################################ceshi
-transform1 = transforms.Compose([transforms.Resize(224), T.CenterCrop(224), transforms.ToTensor(),
-                                 transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225, 0.229, 0.224, 0.225])])
+
+# ------------------test--------------------------------------------------------------
 
 class TestDataset(Dataset):
     def __init__(self, train_path, transform=None):
-        self.vf = os.listdir(train_path + '/test_vf')
-        self.fund = os.listdir(train_path + '/test_fund')
-        assert len(self.vf) == len(self.fund), 'Number does not match'
+        self.data1 = os.listdir(train_path + '/data_file_type1')
+        self.data2 = os.listdir(train_path + '/data_file_type2')
+        assert len(self.data1) == len(self.data2), 'Number does not match'
         self.transform = transform
         self.images_and_labels = []  # 存储图像和标签路径
-        for i in range(len(self.vf)):  # 图片加载进去了
+        for i in range(len(self.data1)):  # 图片加载进去了
             self.images_and_labels.append(
-                (train_path + '/test_vf/' + self.vf[i], train_path + '/test_fund/' + self.fund[i]))
+                (train_path + '/data_file_type1/' + self.data1[i], train_path + '/data_file_type2/' + self.data2[i]))
 
     def __getitem__(self, item):
-        vf_path, fund_path = self.images_and_labels[item]
-        vf = cv2.imread(vf_path)
-        vf = cv2.resize(vf, (224, 224))
-        fund = cv2.imread(fund_path)
-        fund = cv2.resize(fund, (224, 224))
-        img = np.concatenate((vf,fund),axis=2)#224 224 5
-        #img = np.transpose(img, (2, 0, 1))
-
-        #img = Image.fromarray(img)
+        data1_path, data2_path = self.images_and_labels[item]
+        data1 = cv2.imread(data1_path)
+        image1 = cv2.resize(data1, (224, 224))
+        data2 = cv2.imread(data2_path)
+        image2 = cv2.resize(data2, (224, 224))
+        img = np.concatenate((data1,data2),axis=2)
 
         if 'a' in vf_path.split('/')[-1]:
             label = 0
@@ -218,23 +204,26 @@ class TestDataset(Dataset):
             label = 2
         elif 'd' in vf_path.split('/')[-1]:
             label = 3
+        
         if self.transform is not None:
             img = self.transform(img)
-        #print(vf_path.split('/')[-1], label)
-        #img = img / 255
+        
         return img, label
 
     def __len__(self):
-        return len(self.vf)
+        return len(self.data1)
 
-test_data = TestDataset('qgy_fund/vf_train/vf_fund', transform)
+test_data = TestDataset('file_path', transform)
+
+ # ------------------load weight files--------------------------------------------------------------
 checkpoint_path = 'train_pth/class_qgym5_sq_epoch_25.pth'
-
+model = torch.load(checkpoint_path)
 model.eval()
 
+ # ------------------DataLoader--------------------------------------------------------------
 test_dataloader = DataLoader(test_data, 1, shuffle=False, num_workers=0)
 
-model = torch.load(checkpoint_path)
+
 predictions = []
 label1s = []
 out = []
@@ -264,6 +253,7 @@ plab = np.concatenate(label1s, 0)
 pdoc = np.concatenate(out, 0)
 
 
+ # ------------------confusion_matrix--------------------------------------------------------------
 def plot_confusion_matrix(cmtx, num_classes, class_names=None, figsize=(6.4, 4.8)):
     """
     A function to create a colored and labeled confusion matrix matplotlib figure
@@ -313,7 +303,7 @@ plot_confusion_matrix(confusion, num_classes=4)
 print(confusion)
 
 
-##################################评价指标
+ # ------------------evaluation criterion--------------------------------------------------------------
 acc = accuracy_score(plab, pred)
 f1 = f1_score(plab, pred,average='weighted')
 kappa = cohen_kappa_score(plab, pred)
@@ -326,7 +316,7 @@ print('jaccard_score =',jaccard)
 print('recall score:',recall)
 
 
-########四分类roc
+# ------------------ROC curve--------------------------------------------------------------
 y_pred_probabilities=pdoc
 classnames=[]
 for classname in plab:
@@ -339,7 +329,7 @@ n_classes=4
 lw=2
 
 
-#计算每一类的ROC曲线和ROC面积
+
 
 fpr = dict()
 tpr = dict()
@@ -352,27 +342,22 @@ for i in range(n_classes):
 fpr["micro"], tpr["micro"], _ = roc_curve(y_actual_binary.ravel(), y_pred_binary.ravel())
 roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
 
-#计算宏观平均ROC曲线和ROC面积
 
-#第一个汇总所有假阳性率
+
+
 all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
-#然后在此点对所有ROC曲线进行插值
+
 mean_tpr = np.zeros_like(all_fpr)
 for i in range(n_classes):
     mean_tpr += interp(all_fpr, fpr[i], tpr[i])
 
-#最后求平均值并计算AUC
+
 
 mean_tpr /= n_classes
 
 fpr["macro"] = all_fpr
 tpr["macro"] = mean_tpr
 roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
-
-
-#绘制所有ROC曲线
-
-#plt.figure(figsize=(5, 5))  ########四个合在一起的roc曲线
 
 
 colors = itertools.cycle(['red', 'blue', 'green', 'yellow'])
